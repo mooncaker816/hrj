@@ -30,22 +30,26 @@ func readline(r *bufio.Reader) (s string) {
 
 func insertionSort1(n int32, a []int32) {
 	v := a[n-1]
-	inserted := false
-	for j := n - 2; j >= 0; j-- {
+	// inserted := false
+	j := n - 2
+	for ; j >= 0; j-- {
 		if v < a[j] {
 			a[j+1] = a[j]
 			print(a)
 			continue
 		}
-		a[j+1] = v
-		inserted = true
-		print(a)
+		// a[j+1] = v
+		// inserted = true
+		// print(a)
 		break
 	}
-	if !inserted {
-		a[0] = v
-		print(a)
-	}
+	a[j+1] = v
+	print(a)
+
+	// if !inserted {
+	// 	a[0] = v
+	// 	print(a)
+	// }
 }
 
 func print(a []int32) {
