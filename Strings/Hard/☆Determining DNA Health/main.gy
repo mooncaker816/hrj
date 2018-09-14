@@ -1,0 +1,172 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"log"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+var scoreCh = make(chan int)
+var gstate = make(map[string]interface{}, 20)
+
+type boundarr []bound
+type bound struct {
+	p int
+	h int
+}
+
+func main() {
+	runtime.GOMAXPROCS(2)
+	t := time.Now()
+	s := bufio.NewScanner(os.Stdin)
+	buf := make([]byte, 10240)
+	s.Buffer(buf, 1024*1024*1024)
+	s.Scan()
+	//n, _ := strconv.Atoi(s.Text())
+	s.Scan()
+	genes := strings.Split(s.Text(), " ")
+
+	//fmt.Println(len(gmap))
+	//fmt.Println(s.Text())
+	s.Scan()
+	health := strings.Split(s.Text(), " ")
+
+	for pos, gene := range genes {
+		mapen := gstate
+		var mapenNew interface{}
+		var ok bool
+		var i int
+		for i = 0; i < len(gene); i++ {
+
+			mapenNew, ok = mapen[gene[i:i+1]]
+			if ok {
+				mapen = mapenNew.(map[string]interface{})
+			} else {
+				break
+			}
+		}
+		if ok {
+			//mapen = mapenNew.(map[string]interface{})
+			//fmt.Println("mmm", mapen)
+			mmm, ook := mapen["position"]
+			if ook {
+				hpos, _ := strconv.Atoi(health[pos])
+				mmm = append(mmm.(boundarr), bound{pos, hpos})
+				mapen["position"] = mmm
+			} else {
+				hpos, _ := strconv.Atoi(health[pos])
+				arr := make(boundarr, 0, 5)
+				mapen["position"] = append(arr, bound{pos, hpos})
+			}
+		} else {
+			genePart := gene[i:]
+			mapenNew := make(map[string]interface{}, 3)
+			hpos, _ := strconv.Atoi(health[pos])
+			mapenNew["position"] = boundarr{bound{pos, hpos}}
+
+			for j := len(genePart) - 1; j > 0; j-- {
+				mapenNew2 := make(map[string]interface{}, 3)
+				mapenNew2[genePart[j:j+1]] = mapenNew
+				mapenNew = mapenNew2
+			}
+			//fmt.Println(gene, genePart, mapenNew)
+			mapen[genePart[0:1]] = mapenNew
+		}
+	}
+	//fmt.Println(gstate)
+	//for pos, gene := range genes {
+	//	newgstate := gstate
+	//	for i := 0; i < len(gene); i++ {
+	//fmt.Println(gene, newgstate)
+	//		newgstate = newgstate[gene[i:i+1]].(map[string]interface{})
+	//	}
+	//	if newgstate["position"].(map[int]string)[pos] != health[pos] {
+	//		log.Fatal("pechalka")
+	//	}
+	//}
+	//log.Fatal("")
+	log.Println("map creation:", time.Now().Sub(t))
+	t = time.Now()
+	s.Scan()
+	numGenes, _ := strconv.Atoi(s.Text())
+	//fmt.Println("s ", )
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go scoreCounter(&wg)
+	var swg sync.WaitGroup
+	swg.Add(numGenes)
+	for s.Scan() {
+		fdna := strings.Split(s.Text(), " ")
+		//fmt.Println(fdna)
+		first, _ := strconv.Atoi(fdna[0])
+		last, _ := strconv.Atoi(fdna[1])
+		dna := fdna[2]
+
+		go geneCount(first, last, dna, &swg)
+
+	}
+	swg.Wait()
+	close(scoreCh)
+	wg.Wait()
+	log.Println("total:", time.Now().Sub(t))
+}
+
+func scoreCounter(wg *sync.WaitGroup) {
+	var lowScore, highScore int
+	for {
+		score, ok := <-scoreCh
+		if !ok {
+			fmt.Println(lowScore, highScore)
+
+			break
+		}
+		if lowScore == 0 && highScore == 0 {
+			lowScore = score
+			highScore = score
+		} else if score > highScore {
+			highScore = score
+		} else if score < lowScore {
+			lowScore = score
+		}
+	}
+	wg.Done()
+}
+
+func geneCount(first, last int, dna string, swg *sync.WaitGroup) {
+	countScore := 0
+
+	for j := 0; j < len(dna); j++ {
+		dnaPart := dna[j:]
+		//fmt.Println("checking substr:", dnaPart)
+		gstateNew := gstate
+		for i := 0; i < len(dnaPart); i++ {
+			var ok bool
+			gstateNew, ok = gstateNew[dnaPart[i:i+1]].(map[string]interface{})
+			//fmt.Println("trace", gstateNew)
+			if !ok {
+				//fmt.Println("breaking")
+				break
+			} else {
+				if poses, ok := gstateNew["position"]; ok {
+					//fmt.Println("found pos")
+					for _, v := range poses.(boundarr) {
+						if v.p >= first && v.p <= last {
+							countScore += v.h
+							//fmt.Println("state", dnaPart[:i+1], countScore, vv, "flast", first, last, p)
+							//} else {
+							//fmt.Println("not in range")
+						}
+					}
+				}
+			}
+		}
+	}
+	scoreCh <- countScore
+	swg.Done()
+}
